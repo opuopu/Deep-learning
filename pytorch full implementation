@@ -1,0 +1,1347 @@
+# 🧠 Binary Classification Neural Network with PyTorch
+
+In this project, we will build a complete Neural Network using PyTorch.
+
+We will go through the complete Machine Learning / Deep Learning pipeline:
+
+```text
+Dataset
+   ↓
+Separate Features (X) and Target (y)
+   ↓
+Train / Test Split
+   ↓
+Preprocessing
+   ↓
+Convert to PyTorch Tensor
+   ↓
+Create Neural Network
+   ↓
+Forward Propagation
+   ↓
+Calculate Loss
+   ↓
+Backpropagation
+   ↓
+Gradient Descent
+   ↓
+Training
+   ↓
+Testing
+   ↓
+Prediction
+```
+
+---
+
+# 1. Import Libraries
+
+```python
+import pandas as pd
+import numpy as np
+
+import torch
+import torch.nn as nn
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+```
+
+---
+
+# 2. Create Sample Dataset
+
+For practice, we will create a small dataset.
+
+Our goal is to predict whether a person will be selected or not.
+
+```python
+data = {
+    "age": [22, 25, 28, 30, 35, 40, 27, 32, 24, 38],
+    "salary": [25000, 30000, 45000, 50000, 65000, 80000, 40000, 55000, 28000, 70000],
+    "city": [
+        "Dhaka",
+        "Chittagong",
+        "Dhaka",
+        "Sylhet",
+        "Dhaka",
+        "Chittagong",
+        "Sylhet",
+        "Dhaka",
+        "Chittagong",
+        "Sylhet"
+    ],
+    "experience": [
+        "Junior",
+        "Junior",
+        "Mid",
+        "Mid",
+        "Senior",
+        "Senior",
+        "Mid",
+        "Senior",
+        "Junior",
+        "Senior"
+    ],
+    "selected": [0, 0, 1, 1, 1, 1, 0, 1, 0, 1]
+}
+
+df = pd.DataFrame(data)
+
+df
+```
+
+Our dataset looks like:
+
+```text
+age | salary | city       | experience | selected
+---------------------------------------------------
+22  | 25000  | Dhaka      | Junior     | 0
+25  | 30000  | Chittagong | Junior     | 0
+28  | 45000  | Dhaka      | Mid        | 1
+...
+```
+
+---
+
+# 3. Separate Features and Target
+
+We need two parts:
+
+- `X` = input features
+- `y` = target/output
+
+```python
+X = df.iloc[:, :-1]
+y = df.iloc[:, -1]
+```
+
+Remember:
+
+```text
+iloc[row, column]
+
+:     = all rows
+:-1   = all columns except last
+-1    = last column
+```
+
+So:
+
+```text
+X → age, salary, city, experience
+y → selected
+```
+
+Check:
+
+```python
+print(X)
+print(y)
+```
+
+---
+
+# 4. Train Test Split
+
+Now split our dataset into training and testing data.
+
+```python
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+```
+
+Meaning:
+
+```text
+Full Dataset
+     ↓
+ ┌───────────────┐
+ │               │
+ ↓               ↓
+80% Train      20% Test
+```
+
+Training data is used to learn.
+
+Testing data is used to evaluate the trained model.
+
+---
+
+# 5. Identify Column Types
+
+We have different types of features.
+
+```python
+numerical_columns = ["age", "salary"]
+
+nominal_columns = ["city"]
+
+ordinal_columns = ["experience"]
+```
+
+### Numerical
+
+```text
+age
+salary
+```
+
+### Nominal
+
+No natural order:
+
+```text
+Dhaka
+Chittagong
+Sylhet
+```
+
+### Ordinal
+
+Has an order:
+
+```text
+Junior < Mid < Senior
+```
+
+---
+
+# 6. Numerical Pipeline
+
+For numerical columns:
+
+1. Fill missing values
+2. Scale the values
+
+```python
+numerical_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
+```
+
+---
+
+# 7. Nominal Pipeline
+
+For nominal categorical data, we use One Hot Encoding.
+
+```python
+nominal_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    (
+        "encoder",
+        OneHotEncoder(
+            handle_unknown="ignore",
+            sparse_output=False
+        )
+    )
+])
+```
+
+Example:
+
+```text
+city = Dhaka / Sylhet / Chittagong
+```
+
+may become:
+
+```text
+Dhaka  Chittagong  Sylhet
+
+1      0           0
+0      1           0
+0      0           1
+```
+
+---
+
+# 8. Ordinal Pipeline
+
+For experience:
+
+```text
+Junior < Mid < Senior
+```
+
+We can define the order:
+
+```python
+ordinal_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    (
+        "encoder",
+        OrdinalEncoder(
+            categories=[["Junior", "Mid", "Senior"]]
+        )
+    )
+])
+```
+
+It becomes approximately:
+
+```text
+Junior → 0
+Mid    → 1
+Senior → 2
+```
+
+---
+
+# 9. Combine Preprocessing
+
+Now combine all pipelines.
+
+```python
+preprocessor = ColumnTransformer([
+    ("num", numerical_pipeline, numerical_columns),
+    ("nom", nominal_pipeline, nominal_columns),
+    ("ord", ordinal_pipeline, ordinal_columns)
+])
+```
+
+Our preprocessing flow is now:
+
+```text
+Raw X
+ │
+ ├── Numerical
+ │      ↓
+ │   Imputer
+ │      ↓
+ │   Scaler
+ │
+ ├── Nominal
+ │      ↓
+ │   Imputer
+ │      ↓
+ │   OneHotEncoder
+ │
+ └── Ordinal
+        ↓
+     Imputer
+        ↓
+     OrdinalEncoder
+```
+
+---
+
+# 10. Fit and Transform Training Data
+
+```python
+X_train = preprocessor.fit_transform(X_train)
+```
+
+For testing data:
+
+```python
+X_test = preprocessor.transform(X_test)
+```
+
+Notice:
+
+```text
+TRAIN:
+fit_transform()
+
+TEST:
+transform()
+```
+
+We don't `fit` the preprocessing again on test data.
+
+This helps prevent data leakage.
+
+---
+
+# 11. Check Shape
+
+```python
+print(X_train.shape)
+print(X_test.shape)
+```
+
+Remember:
+
+```text
+X_train.shape
+      ↓
+(samples, features)
+```
+
+For example:
+
+```text
+(8, 6)
+```
+
+means:
+
+```text
+8 = samples
+6 = features
+```
+
+Therefore:
+
+```python
+input_size = X_train.shape[1]
+```
+
+We use `[1]` because we need the number of features.
+
+---
+
+# 12. Convert NumPy Data to PyTorch Tensor
+
+Our neural network needs tensors.
+
+```python
+X_train = torch.tensor(
+    X_train,
+    dtype=torch.float32
+)
+
+X_test = torch.tensor(
+    X_test,
+    dtype=torch.float32
+)
+```
+
+Convert targets:
+
+```python
+y_train = torch.tensor(
+    y_train.to_numpy(),
+    dtype=torch.float32
+).reshape(-1, 1)
+
+y_test = torch.tensor(
+    y_test.to_numpy(),
+    dtype=torch.float32
+).reshape(-1, 1)
+```
+
+Check:
+
+```python
+print(X_train.shape)
+print(y_train.shape)
+```
+
+Example:
+
+```text
+X_train → torch.Size([8, 6])
+y_train → torch.Size([8, 1])
+```
+
+Meaning:
+
+```text
+8 samples
+6 input features
+
+Each sample has:
+1 target
+```
+
+---
+
+# 13. Create Neural Network
+
+Now we use PyTorch's `nn.Module`.
+
+```python
+class NeuralNetwork(nn.Module):
+
+    def __init__(self, input_size):
+        super().__init__()
+
+        self.layer1 = nn.Linear(input_size, 8)
+        self.relu = nn.ReLU()
+
+        self.layer2 = nn.Linear(8, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, X):
+
+        z1 = self.layer1(X)
+
+        h1 = self.relu(z1)
+
+        z2 = self.layer2(h1)
+
+        yp = self.sigmoid(z2)
+
+        return yp
+```
+
+Architecture:
+
+```text
+6 Input Features
+       ↓
+nn.Linear(6, 8)
+       ↓
+8 Hidden Neurons
+       ↓
+     ReLU
+       ↓
+nn.Linear(8, 1)
+       ↓
+    Sigmoid
+       ↓
+1 Prediction
+```
+
+---
+
+# 14. Understanding nn.Linear
+
+Previously we manually wrote:
+
+```python
+z1 = X @ w1 + b1
+```
+
+Now:
+
+```python
+z1 = self.layer1(X)
+```
+
+does essentially the same operation.
+
+```text
+nn.Linear
+   ↓
+automatically manages
+   ↓
+Weights + Bias
+```
+
+Therefore we don't manually create:
+
+```text
+w1
+b1
+w2
+b2
+```
+
+---
+
+# 15. Create the Model
+
+First get the number of input features:
+
+```python
+input_size = X_train.shape[1]
+```
+
+Then:
+
+```python
+model = NeuralNetwork(input_size)
+```
+
+Check model:
+
+```python
+print(model)
+```
+
+---
+
+# 16. Forward Propagation
+
+Now send training data through the network.
+
+```python
+yp = model(X_train)
+```
+
+Check:
+
+```python
+print(yp)
+print(yp.shape)
+```
+
+Because we use Sigmoid:
+
+```text
+Prediction will be between:
+
+0 ───────────── 1
+```
+
+Example:
+
+```text
+0.23
+0.81
+0.67
+0.34
+```
+
+These are probabilities/scores before applying a classification threshold.
+
+---
+
+# 17. Loss Function
+
+This is binary classification.
+
+We can use Binary Cross Entropy:
+
+```python
+loss_function = nn.BCELoss()
+```
+
+Calculate loss:
+
+```python
+loss = loss_function(yp, y_train)
+
+print(loss)
+```
+
+Loss tells us:
+
+```text
+Prediction
+    ↓
+Compare with
+    ↓
+Actual y
+    ↓
+Error / Loss
+```
+
+Our goal:
+
+```text
+Loss ↓
+```
+
+---
+
+# 18. Optimizer
+
+Earlier we manually updated weights:
+
+```text
+weight = weight - learning_rate × gradient
+```
+
+PyTorch optimizer can handle the update for us.
+
+```python
+optimizer = torch.optim.SGD(
+    model.parameters(),
+    lr=0.01
+)
+```
+
+`model.parameters()` gives the optimizer access to all trainable:
+
+```text
+layer1 weights
+layer1 biases
+layer2 weights
+layer2 biases
+```
+
+---
+
+# 19. Complete Training Loop
+
+Now we put everything together.
+
+```python
+epochs = 1000
+
+for epoch in range(epochs):
+
+    # 1. Forward Propagation
+    yp = model(X_train)
+
+    # 2. Calculate Loss
+    loss = loss_function(yp, y_train)
+
+    # 3. Clear Old Gradients
+    optimizer.zero_grad()
+
+    # 4. Backpropagation
+    loss.backward()
+
+    # 5. Update Weights and Biases
+    optimizer.step()
+
+    # Print loss sometimes
+    if (epoch + 1) % 100 == 0:
+        print(
+            f"Epoch: {epoch + 1}, Loss: {loss.item():.4f}"
+        )
+```
+
+---
+
+# 20. What Happens Inside One Epoch?
+
+This is the most important part.
+
+```text
+X_train
+   ↓
+model(X_train)
+   ↓
+Forward Propagation
+   ↓
+Prediction (yp)
+   ↓
+Loss Function
+   ↓
+Loss
+   ↓
+optimizer.zero_grad()
+   ↓
+Clear previous gradients
+   ↓
+loss.backward()
+   ↓
+Autograd calculates gradients
+   ↓
+optimizer.step()
+   ↓
+Update weights and biases
+```
+
+Then the next epoch starts.
+
+---
+
+# 21. What `loss.backward()` Does
+
+```python
+loss.backward()
+```
+
+PyTorch automatically calculates gradients for all trainable parameters.
+
+Previously we manually calculated things such as:
+
+```text
+dW2
+db2
+dW1
+db1
+```
+
+Now Autograd handles them.
+
+We can inspect them:
+
+```python
+for name, parameter in model.named_parameters():
+    print(name)
+    print(parameter.grad)
+```
+
+---
+
+# 22. What `optimizer.step()` Does
+
+Previously:
+
+```python
+with torch.no_grad():
+
+    w1 -= lr * w1.grad
+    b1 -= lr * b1.grad
+
+    w2 -= lr * w2.grad
+    b2 -= lr * b2.grad
+```
+
+Now:
+
+```python
+optimizer.step()
+```
+
+handles the parameter update.
+
+Conceptually:
+
+```text
+new weight
+    =
+old weight
+    -
+learning rate × gradient
+```
+
+---
+
+# 23. Why zero_grad()?
+
+PyTorch gradients accumulate.
+
+Therefore before another backward pass:
+
+```python
+optimizer.zero_grad()
+```
+
+clears the previous gradients.
+
+Training cycle:
+
+```text
+zero_grad()
+     ↓
+forward
+     ↓
+loss
+     ↓
+backward
+     ↓
+step
+```
+
+---
+
+# 24. Test the Model
+
+After training, test the model.
+
+We don't need gradients during testing.
+
+```python
+with torch.no_grad():
+
+    test_predictions = model(X_test)
+
+    print(test_predictions)
+```
+
+---
+
+# 25. Convert Probability to Class
+
+Sigmoid might return:
+
+```text
+0.21
+0.78
+0.91
+0.35
+```
+
+For binary classification, we can use threshold `0.5`.
+
+```python
+predicted_classes = (
+    test_predictions >= 0.5
+).float()
+```
+
+Meaning:
+
+```text
+Probability < 0.5 → 0
+Probability ≥ 0.5 → 1
+```
+
+Check:
+
+```python
+print(predicted_classes)
+```
+
+---
+
+# 26. Calculate Accuracy
+
+```python
+accuracy = (
+    predicted_classes == y_test
+).float().mean()
+
+print("Accuracy:", accuracy.item())
+```
+
+For example:
+
+```text
+Accuracy: 0.80
+```
+
+means:
+
+```text
+80% predictions were correct
+```
+
+Note: our sample dataset is extremely small, so its test accuracy is only for learning the pipeline, not a reliable measure of real-world model quality.
+
+---
+
+# 27. Complete Code
+
+```python
+import pandas as pd
+import numpy as np
+
+import torch
+import torch.nn as nn
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, OrdinalEncoder
+from sklearn.impute import SimpleImputer
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+
+
+# =========================================
+# 1. Dataset
+# =========================================
+
+data = {
+    "age": [22, 25, 28, 30, 35, 40, 27, 32, 24, 38],
+
+    "salary": [
+        25000, 30000, 45000, 50000, 65000,
+        80000, 40000, 55000, 28000, 70000
+    ],
+
+    "city": [
+        "Dhaka", "Chittagong", "Dhaka", "Sylhet",
+        "Dhaka", "Chittagong", "Sylhet", "Dhaka",
+        "Chittagong", "Sylhet"
+    ],
+
+    "experience": [
+        "Junior", "Junior", "Mid", "Mid",
+        "Senior", "Senior", "Mid", "Senior",
+        "Junior", "Senior"
+    ],
+
+    "selected": [0, 0, 1, 1, 1, 1, 0, 1, 0, 1]
+}
+
+df = pd.DataFrame(data)
+
+
+# =========================================
+# 2. Features and Target
+# =========================================
+
+X = df.iloc[:, :-1]
+y = df.iloc[:, -1]
+
+
+# =========================================
+# 3. Train Test Split
+# =========================================
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+
+# =========================================
+# 4. Column Types
+# =========================================
+
+numerical_columns = ["age", "salary"]
+nominal_columns = ["city"]
+ordinal_columns = ["experience"]
+
+
+# =========================================
+# 5. Pipelines
+# =========================================
+
+numerical_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="median")),
+    ("scaler", StandardScaler())
+])
+
+nominal_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    (
+        "encoder",
+        OneHotEncoder(
+            handle_unknown="ignore",
+            sparse_output=False
+        )
+    )
+])
+
+ordinal_pipeline = Pipeline([
+    ("imputer", SimpleImputer(strategy="most_frequent")),
+    (
+        "encoder",
+        OrdinalEncoder(
+            categories=[["Junior", "Mid", "Senior"]]
+        )
+    )
+])
+
+
+# =========================================
+# 6. Preprocessor
+# =========================================
+
+preprocessor = ColumnTransformer([
+    ("num", numerical_pipeline, numerical_columns),
+    ("nom", nominal_pipeline, nominal_columns),
+    ("ord", ordinal_pipeline, ordinal_columns)
+])
+
+
+# =========================================
+# 7. Transform Data
+# =========================================
+
+X_train = preprocessor.fit_transform(X_train)
+X_test = preprocessor.transform(X_test)
+
+
+# =========================================
+# 8. Convert to Tensor
+# =========================================
+
+X_train = torch.tensor(
+    X_train,
+    dtype=torch.float32
+)
+
+X_test = torch.tensor(
+    X_test,
+    dtype=torch.float32
+)
+
+y_train = torch.tensor(
+    y_train.to_numpy(),
+    dtype=torch.float32
+).reshape(-1, 1)
+
+y_test = torch.tensor(
+    y_test.to_numpy(),
+    dtype=torch.float32
+).reshape(-1, 1)
+
+
+# =========================================
+# 9. Neural Network
+# =========================================
+
+class NeuralNetwork(nn.Module):
+
+    def __init__(self, input_size):
+        super().__init__()
+
+        self.layer1 = nn.Linear(input_size, 8)
+        self.relu = nn.ReLU()
+
+        self.layer2 = nn.Linear(8, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, X):
+
+        z1 = self.layer1(X)
+
+        h1 = self.relu(z1)
+
+        z2 = self.layer2(h1)
+
+        yp = self.sigmoid(z2)
+
+        return yp
+
+
+# =========================================
+# 10. Initialize Model
+# =========================================
+
+input_size = X_train.shape[1]
+
+model = NeuralNetwork(input_size)
+
+
+# =========================================
+# 11. Loss Function
+# =========================================
+
+loss_function = nn.BCELoss()
+
+
+# =========================================
+# 12. Optimizer
+# =========================================
+
+optimizer = torch.optim.SGD(
+    model.parameters(),
+    lr=0.01
+)
+
+
+# =========================================
+# 13. Training
+# =========================================
+
+epochs = 1000
+
+for epoch in range(epochs):
+
+    # Forward
+    yp = model(X_train)
+
+    # Loss
+    loss = loss_function(yp, y_train)
+
+    # Clear old gradients
+    optimizer.zero_grad()
+
+    # Backpropagation
+    loss.backward()
+
+    # Gradient Descent
+    optimizer.step()
+
+    if (epoch + 1) % 100 == 0:
+
+        print(
+            f"Epoch {epoch + 1}, "
+            f"Loss: {loss.item():.4f}"
+        )
+
+
+# =========================================
+# 14. Testing
+# =========================================
+
+with torch.no_grad():
+
+    test_predictions = model(X_test)
+
+    predicted_classes = (
+        test_predictions >= 0.5
+    ).float()
+
+
+# =========================================
+# 15. Accuracy
+# =========================================
+
+accuracy = (
+    predicted_classes == y_test
+).float().mean()
+
+print("Predictions:")
+print(predicted_classes)
+
+print("Actual:")
+print(y_test)
+
+print(
+    "Accuracy:",
+    accuracy.item()
+)
+```
+
+---
+
+# 28. Manual vs PyTorch nn
+
+What we previously did manually:
+
+```text
+Manual                           PyTorch
+
+w1, b1                      →    nn.Linear()
+w2, b2                      →    nn.Linear()
+
+X @ w1 + b1                 →    layer1(X)
+
+manual ReLU                 →    nn.ReLU()
+
+manual Sigmoid              →    nn.Sigmoid()
+
+manual loss                 →    nn.BCELoss()
+
+loss.backward()             →    loss.backward()
+
+w -= lr * w.grad            →    optimizer.step()
+
+w.grad.zero_()              →    optimizer.zero_grad()
+```
+
+So PyTorch is not doing a completely different algorithm.
+
+It is automating the same concepts we learned manually.
+
+---
+
+# 29. Full Neural Network Flow
+
+```text
+                   RAW DATASET
+                        │
+                        ▼
+                Pandas DataFrame
+                        │
+                        ▼
+                   X and y
+                        │
+                        ▼
+                Train/Test Split
+                        │
+                        ▼
+                  Preprocessing
+                        │
+            ┌───────────┼───────────┐
+            ▼           ▼           ▼
+        Numerical    Nominal     Ordinal
+            │           │           │
+            ▼           ▼           ▼
+         Scaling      OneHot      Ordinal
+                        │
+                        ▼
+                 Numerical Data
+                        │
+                        ▼
+                  Torch Tensor
+                        │
+                        ▼
+                  Input Layer
+                  6 Features
+                        │
+                        ▼
+                 Linear Layer
+                     6 → 8
+                        │
+                        ▼
+                      ReLU
+                        │
+                        ▼
+                 Linear Layer
+                     8 → 1
+                        │
+                        ▼
+                    Sigmoid
+                        │
+                        ▼
+                  Prediction
+                        │
+                        ▼
+                    BCE Loss
+                        │
+                        ▼
+                 loss.backward()
+                        │
+                        ▼
+                    Gradients
+                        │
+                        ▼
+                optimizer.step()
+                        │
+                        ▼
+              Weights/Bias Updated
+                        │
+                        ▼
+                   Next Epoch
+```
+
+# 30. Most Important Things to Remember
+
+### Dataset
+
+```text
+X = Features
+y = Target
+```
+
+### Shape
+
+```text
+X.shape = (samples, features)
+
+shape[0] = samples
+shape[1] = features
+```
+
+### Linear Layer
+
+```python
+nn.Linear(input_features, output_neurons)
+```
+
+### Forward
+
+```text
+Input
+ ↓
+Linear
+ ↓
+ReLU
+ ↓
+Linear
+ ↓
+Sigmoid
+ ↓
+Prediction
+```
+
+### Training
+
+```text
+Forward
+   ↓
+Loss
+   ↓
+zero_grad()
+   ↓
+Backward
+   ↓
+Optimizer Step
+   ↓
+Repeat
+```
+
+### The Core Idea
+
+A Neural Network is basically:
+
+```text
+Make Prediction
+      ↓
+Measure Error
+      ↓
+Calculate Gradients
+      ↓
+Update Weights
+      ↓
+Make Better Prediction
+      ↓
+Repeat
+```
+
+That repeated learning process is called **training**.
